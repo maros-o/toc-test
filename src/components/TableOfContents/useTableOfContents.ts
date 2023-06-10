@@ -1,61 +1,32 @@
-import { useEffect, useState, useRef } from 'react';
 import { ContentItem } from './types/ContentItem';
 
 type TableOfContentsArg = {
     items: ContentItem[];
 };
 
+type ChildrenByParentId = { [id: string]: ContentItem[] };
+
 export const useTableOfContents = ({ items }: TableOfContentsArg) => {
-    const [expanded, setExpanded] = useState<{ [id: string]: boolean }>({});
-    const childrenIdsRef = useRef<{ [id: string]: string[] }>({});
+    const getChildrenByParentId = (): ChildrenByParentId => {
+        const children: ChildrenByParentId = {};
+        children['root'] = [];
 
-    useEffect(() => {
-        const newChildrenIds: typeof childrenIdsRef.current = {};
-
-        items.forEach(({ id, parentId }) => {
-            newChildrenIds[id] = [];
-
-            if (parentId) {
-                newChildrenIds[parentId].push(id);
+        items.forEach((item) => {
+            if (item.parentId) {
+                if (!children[item.parentId]) {
+                    children[item.parentId] = [];
+                }
+                children[item.parentId].push(item);
+            } else {
+                children['root'].push(item);
             }
         });
-
-        childrenIdsRef.current = newChildrenIds;
-    }, [items]);
-
-    const setExpandedById = (id: string, value: boolean) => {
-        if (value) {
-            setExpanded((prevExpanded) => ({
-                ...prevExpanded,
-                [id]: value,
-            }));
-            return;
-        }
-
-        setExpanded((prevExpanded) => {
-            const newExpanded = { ...prevExpanded };
-            collapse(id, newExpanded);
-            return newExpanded;
-        });
+        return children;
     };
 
-    const collapse = (id: string, newExpanded: typeof expanded) => {
-        newExpanded[id] = false;
-
-        const childrenIds = childrenIdsRef.current[id];
-        if (!childrenIds) {
-            return;
-        }
-        childrenIds.forEach((childId: string) => {
-            if (newExpanded[childId]) {
-                collapse(childId, newExpanded);
-            }
-        });
-    };
+    const children: ChildrenByParentId = getChildrenByParentId();
 
     const onClick = (item: ContentItem) => () => console.log(item);
 
-    const handleToggle = (id: string) => () => setExpandedById(id, !expanded[id]);
-
-    return { items, expanded, onClick, handleToggle };
+    return { children, onClick };
 };
