@@ -1,57 +1,30 @@
-import { FC, useState } from 'react';
+import { FC } from 'react';
 import { useTableOfContents } from './useTableOfContents';
 import { ContentItem } from './types/ContentItem';
 
 type TableOfContentsProps = ReturnType<typeof useTableOfContents>;
 
-type ContentItemWithChildren = ContentItem & { children: ContentItemWithChildren[] };
-
-const TableOfContentsItem: FC<{ item: ContentItemWithChildren; onClick: any }> = ({ item, onClick }) => {
-    const [expanded, setExpanded] = useState<boolean>(false);
-
-    return (
-        <div style={{ marginLeft: 20, marginTop: 5 }}>
-            <button
-                style={{ visibility: item.children.length > 0 ? 'visible' : 'hidden' }}
-                onClick={onClick(setExpanded)}
-            >
-                {expanded ? 'v' : '>'}
-            </button>
-            <span style={{ marginLeft: 5 }}>{item.name}</span>
-            <div style={{ borderLeft: '1px dotted', marginLeft: 12 }}>
-                {expanded &&
-                    item.children.map((child) => (
-                        <TableOfContentsItem key={child.name} item={child} onClick={onClick} />
-                    ))}
-            </div>
-        </div>
-    );
-};
-
-export const TableOfContents: FC<TableOfContentsProps> = ({ items, onClick }) => {
-    const getRoot = (): ContentItemWithChildren => {
-        const itemMap: { [id: string]: ContentItemWithChildren } = {};
-        const root: ContentItemWithChildren = { id: 'root', name: 'root', level: 0, children: [] };
-        itemMap[root.id] = root;
-
-        items.forEach((item) => {
-            itemMap[item.id] = { ...item, children: [] };
-
-            if (item.parentId) {
-                itemMap[item.parentId].children.push(itemMap[item.id]);
-            } else {
-                itemMap[root.id].children.push(itemMap[item.id]);
-            }
-        });
-
-        return root;
-    };
-
+export const TableOfContents: FC<TableOfContentsProps> = ({ items, expanded, onClick, handleToggle }) => {
     return (
         <div style={{ fontFamily: 'consolas' }}>
-            {getRoot().children.map((child: ContentItemWithChildren) => (
-                <TableOfContentsItem key={child.name} item={child} onClick={onClick} />
-            ))}
+            {items.map(({ id, level, parentId, name }: ContentItem, idx: number) => {
+                const hasChildren = items[idx + 1]?.level > level;
+
+                if (parentId && !expanded[parentId]) {
+                    return null;
+                }
+                return (
+                    <div key={id} style={{ marginLeft: 30 * level - 30, marginTop: 5 }}>
+                        <button
+                            onClick={handleToggle(id)}
+                            style={{ width: 22, visibility: hasChildren ? 'visible' : 'hidden', marginRight: 5 }}
+                        >
+                            {expanded[id] ? 'v' : '>'}
+                        </button>
+                        <span onClick={onClick({ id, level, parentId, name })}>{name}</span>
+                    </div>
+                );
+            })}
         </div>
     );
 };
