@@ -1,45 +1,47 @@
-import { FC, useState } from 'react';
+import { FC, memo } from 'react';
 import { useTableOfContents } from './useTableOfContents';
 import { ContentItem } from './types/ContentItem';
 
 type TableOfContentsProps = ReturnType<typeof useTableOfContents>;
 
-type TableOfContentsItemProps = Pick<TableOfContentsProps, 'children' | 'onClick'> & {
+type TableOfContentsItemProps = {
     item: ContentItem;
+    isExpanded: boolean;
+    hasChildren: boolean;
+    onClick: (item: ContentItem) => () => void;
+    handleToggle: (itemId: string, isExpanded: boolean) => () => void;
 };
 
-const TableOfContentsItem: FC<TableOfContentsItemProps> = ({ item, children, onClick }) => {
-    const [expanded, setExpanded] = useState<boolean>(false);
-
-    return (
-        <div style={{ marginLeft: 20, marginTop: 5 }}>
+const TableOfContentsItem: FC<TableOfContentsItemProps> = memo(
+    ({ item, isExpanded, hasChildren, onClick, handleToggle }) => (
+        <div style={{ marginLeft: (item.level - 1) * 22, marginTop: 4 }}>
             <button
-                style={{ width: 22, visibility: item.id in children ? 'visible' : 'hidden', cursor: 'pointer' }}
-                onClick={() => {
-                    setExpanded((prev) => !prev);
-                }}
+                onClick={handleToggle(item.id, isExpanded)}
+                style={{ width: 22, marginRight: 4, visibility: hasChildren ? 'visible' : 'hidden' }}
             >
-                {expanded ? 'v' : '>'}
+                {isExpanded ? 'v' : '>'}
             </button>
-            <span style={{ marginLeft: 5, cursor: 'pointer' }} onClick={onClick(item)}>
-                {item.name}
-            </span>
-            <div style={{ borderLeft: '1px dotted', marginLeft: 12 }}>
-                {expanded &&
-                    children[item.id]?.map((child: ContentItem, index: number) => (
-                        <TableOfContentsItem key={index} item={child} children={children} onClick={onClick} />
-                    ))}
-            </div>
+            <span onClick={onClick(item)}>{item.name}</span>
         </div>
-    );
-};
+    )
+);
 
-export const TableOfContents: FC<TableOfContentsProps> = ({ children, onClick }) => {
-    return (
-        <div style={{ fontFamily: 'consolas' }}>
-            {children['root']?.map((child: ContentItem, index: number) => (
-                <TableOfContentsItem key={index} item={child} children={children} onClick={onClick} />
-            ))}
-        </div>
-    );
-};
+export const TableOfContents: FC<TableOfContentsProps> = ({ items, expanded, onClick, handleToggle }) => (
+    <div style={{ fontFamily: 'consolas', textDecoration: 'underline #dedede' }}>
+        {items.map((item: ContentItem, index: number) => {
+            if (item.parentId && !expanded[item.parentId]) {
+                return null;
+            }
+            return (
+                <TableOfContentsItem
+                    key={index}
+                    item={item}
+                    isExpanded={expanded[item.id]}
+                    hasChildren={items[index + 1]?.level > item.level}
+                    onClick={onClick}
+                    handleToggle={handleToggle}
+                />
+            );
+        })}
+    </div>
+);
