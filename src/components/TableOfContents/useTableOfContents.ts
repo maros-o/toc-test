@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { ContentItem } from './types/ContentItem';
 
 type TableOfContentsArg = {
@@ -6,35 +6,44 @@ type TableOfContentsArg = {
 };
 
 export const useTableOfContents = ({ items }: TableOfContentsArg) => {
-    const [expanded, setExpanded] = useState<{ [itemId: string]: boolean }>({});
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-    const generateChildrenMapper = useCallback(() => {
-        const childrenMapper: { [itemId: string]: ContentItem[] } = {};
-
-        items.forEach(({ parentId, ...rest }) => {
-            if (!parentId) {
-                return;
-            }
-            if (!childrenMapper[parentId]) {
-                childrenMapper[parentId] = [];
-            }
-            childrenMapper[parentId].push({ parentId, ...rest });
-        });
-
-        return childrenMapper;
+    useEffect(() => {
+        setExpandedIds(new Set());
     }, [items]);
 
-    const childrenMapper: ReturnType<typeof generateChildrenMapper> = useMemo(generateChildrenMapper, [
-        generateChildrenMapper,
+    const rootItem: ContentItem = useMemo(() => ({ id: 'root', level: -1, name: 'root' }), []);
+
+    const generateParentToChildrenMap = useCallback(() => {
+        const newChildrenMapper: { [itemId: string]: ContentItem[] } = {
+            [rootItem.id]: [],
+        };
+
+        items.forEach((item) => {
+            if (!item.parentId) {
+                newChildrenMapper[rootItem.id].push(item);
+                return;
+            }
+            if (!(item.parentId in newChildrenMapper)) {
+                newChildrenMapper[item.parentId] = [];
+            }
+            newChildrenMapper[item.parentId].push(item);
+        });
+
+        return newChildrenMapper;
+    }, [items, rootItem]);
+
+    const childrenMapper: ReturnType<typeof generateParentToChildrenMap> = useMemo(generateParentToChildrenMap, [
+        generateParentToChildrenMap,
     ]);
 
-    const collapse = useCallback(
-        (itemId: string, newExpanded: typeof expanded) => {
-            newExpanded[itemId] = false;
+    const collapseRecursively = useCallback(
+        (itemId: string, newExpandedIds: typeof expandedIds) => {
+            newExpandedIds.delete(itemId);
 
-            childrenMapper[itemId]?.forEach((child: ContentItem) => {
-                if (newExpanded[child.id]) {
-                    collapse(child.id, newExpanded);
+            childrenMapper[itemId]?.forEach(({ id }) => {
+                if (newExpandedIds.has(id)) {
+                    collapseRecursively(id, newExpandedIds);
                 }
             });
         },
@@ -42,22 +51,47 @@ export const useTableOfContents = ({ items }: TableOfContentsArg) => {
     );
 
     const setExpandedById = useCallback(
-        (itemId: string, value: boolean) => {
-            if (value === true) {
-                setExpanded((prevExpanded) => ({
-                    ...prevExpanded,
-                    [itemId]: value,
-                }));
+        (itemId: string, expand: boolean) => {
+            if (expand) {
+                setExpandedIds((prevExpandedIds) => {
+                    const newExpandedIds = new Set(prevExpandedIds);
+                    newExpandedIds.add(itemId);
+                    return newExpandedIds;
+                });
                 return;
             }
-            setExpanded((prevExpanded) => {
-                const newExpanded: typeof prevExpanded = { ...prevExpanded };
-                collapse(itemId, newExpanded);
-                return newExpanded;
+
+            setExpandedIds((prevExpandedIds) => {
+                const newExpandedIds = new Set(prevExpandedIds);
+                collapseRecursively(itemId, newExpandedIds);
+                return newExpandedIds;
             });
         },
-        [collapse]
+        [collapseRecursively]
     );
+
+    const addActiveItemsRecursively = useCallback(
+        (item: ContentItem, newActiveItems: ContentItem[]) => {
+            childrenMapper[item.id].forEach((child) => {
+                newActiveItems.push(child);
+
+                if (expandedIds.has(child.id)) {
+                    addActiveItemsRecursively(child, newActiveItems);
+                }
+            });
+        },
+        [childrenMapper, expandedIds]
+    );
+
+    const getActiveItems = useCallback(() => {
+        const newActiveItems: ContentItem[] = [];
+
+        addActiveItemsRecursively(rootItem, newActiveItems);
+
+        return newActiveItems;
+    }, [addActiveItemsRecursively, rootItem]);
+
+    const activeItems: ContentItem[] = useMemo(getActiveItems, [getActiveItems]);
 
     const onClick = useCallback((item: ContentItem) => () => console.log(item), []);
 
@@ -66,5 +100,5 @@ export const useTableOfContents = ({ items }: TableOfContentsArg) => {
         [setExpandedById]
     );
 
-    return { items, expanded, onClick, handleToggle };
+    return { activeItems, childrenMapper, expandedIds, onClick, handleToggle };
 };
